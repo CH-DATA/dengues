@@ -463,6 +463,7 @@ const FIREBASE_CONFIG = {
   messagingSenderId: "177186111785",
   appId: "1:177186111785:web:1ec0c425ec6fb679bdb738"
 };
+const IMPORT_1 = [{"n": 286, "expediente": "2026/PLAN", "fechaIngreso": "2026-09-11", "solicitadoPor": "CEMENTERIO DESCANSO CELESTIAL", "direccion": "CASA HUERTA LA CAMPIÑA", "archivadoEn": "CEMENTERIO", "zona": "NIEVERIA", "fechaActividad": "2026-09-11", "sensibilizaciones": 3, "actividad": "DENGUE"}, {"n": 287, "expediente": "2026/SN", "fechaIngreso": "2026-09-15", "solicitadoPor": "MERCADO DE NICOLAS DE PIEROLA", "direccion": "2DA ZONA DE NICOLAS DE PIEROLA", "archivadoEn": "MERCADOS", "zona": "NICOLAS DE PIEROLA", "fechaActividad": "2026-09-15", "sensibilizaciones": 40, "actividad": "DENGUE"}, {"n": 288, "expediente": "2026/003425", "fechaIngreso": "2026-09-07", "solicitadoPor": "ASOC. INTEGRAL POBLADORES DE JR JUNIN - VALLE DEL TRIUNFO", "direccion": "VALLE DEL TRIUNFO JICAMARCA", "archivadoEn": "CHANCHERIA", "zona": "JICAMARCA", "fechaActividad": "2026-09-07", "sensibilizaciones": 27, "actividad": "CHANCHERIA"}, {"n": 289, "expediente": "2026/003426", "fechaIngreso": "2026-09-14", "solicitadoPor": "ASOC. POSICIONARIOS LOS FICUS", "direccion": "JIRON HUANUCO MZ N3 LT 1A VALLE DEL TRIUNFO", "archivadoEn": "CHANCHERIA", "zona": "JICAMARCA", "fechaActividad": "2026-09-14", "sensibilizaciones": 15, "actividad": "CHANCHERIA"}, {"n": 290, "expediente": "2026/SN", "fechaIngreso": "2026-09-17", "solicitadoPor": "ROSA MARIA BARBARAN POZO", "direccion": "LA CAÑADA CALIFORNIA", "archivadoEn": "PISCINA", "zona": "CALIFORNIA", "fechaActividad": "2026-09-17", "sensibilizaciones": 1, "actividad": "DENGUE"}, {"n": 291, "expediente": "2026/SN", "fechaIngreso": "2026-09-18", "solicitadoPor": "UNIVERSIDAD ENRIQUE GUZMAN Y VALLE", "direccion": "AV. ENRIQUE GUZMAN Y VALLE", "archivadoEn": "I.E DENGUE", "zona": "CHOSICA", "fechaActividad": "2026-09-18", "sensibilizaciones": 63, "actividad": "DENGUE"}, {"n": 292, "expediente": "2026/SN", "fechaIngreso": "2026-09-17", "solicitadoPor": "DIVISION POLICIAL CHOSICA", "direccion": "PASAJE SOLEA # 192", "archivadoEn": "SENSIBILIZACION DE CANES", "zona": "CHOSICA", "fechaActividad": "2026-09-17", "sensibilizaciones": 10, "actividad": "CANES"}, {"n": 293, "expediente": "2026/0039917", "fechaIngreso": "2026-09-11", "solicitadoPor": "MIGUEL ANGEL INFANTES ROJAS", "direccion": "SAN FRANCISCO #114 MOYOPAMPA", "archivadoEn": "SOLIC. CANES", "zona": "CHOSICA", "fechaActividad": "2026-09-11", "sensibilizaciones": 2, "actividad": "CANES"}, {"n": 294, "expediente": "2026/SN", "fechaIngreso": "2026-09-25", "solicitadoPor": "I.E NICOLAS DE PIEROLA", "direccion": "1RA ZONA DE NICOLAS DE PIEROLA", "archivadoEn": "I.E DENGUE", "zona": "CHOSICA", "fechaActividad": "2026-09-25", "sensibilizaciones": 98, "actividad": "DENGUE"}, {"n": 295, "expediente": "2026/SN", "fechaIngreso": "2026-09-28", "solicitadoPor": "I.E N°0055 MANUEL GONZALES PRADA", "direccion": "NICOLAS DE PIEROLA", "archivadoEn": "I.E DENGUE", "zona": "CHOSICA", "fechaActividad": "2026-09-28", "sensibilizaciones": 67, "actividad": "DENGUE"}, {"n": 296, "expediente": "2026/SN", "fechaIngreso": "2026-09-28", "solicitadoPor": "ASOC. INTEGRAL POBLADORES DE JR JUNIN - VALLE DEL TRIUNFO", "direccion": "JR JUNIN VALLE DEL TRIUNFO JICAMARCA", "archivadoEn": "JICAMARCA", "zona": "JICAMARCA", "fechaActividad": "2026-09-28", "sensibilizaciones": 18, "actividad": "DENGUE"}, {"n": 297, "expediente": "2026/SN", "fechaIngreso": "2026-09-24", "solicitadoPor": "CASA DE ENCUENTRO FRANCISCANAS MISIONERAS DE MARIA", "direccion": "SAN ALBERTO 189 CHACRASANA", "archivadoEn": "AA.HH DENGUE", "zona": "CHACRASANA", "fechaActividad": "2026-09-24", "sensibilizaciones": 11, "actividad": "DENGUE"}, {"n": 298, "expediente": "2026/SN", "fechaIngreso": "2026-09-22", "solicitadoPor": "1RA ZONA A.H MARISCAL CASTILLA", "direccion": "CALLE TUPAC AMARU", "archivadoEn": "AA.HH DENGUE", "zona": "CHOSICA", "fechaActividad": "2026-09-22", "sensibilizaciones": 20, "actividad": "DENGUE"}];
 const CLOUD_ON = !!FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('PEGAR')!==0 && typeof firebase!=='undefined';
 let db=null, colRef=null, cloudReady=false, syncedMap={};
 
@@ -486,6 +487,12 @@ function initCloud(){
     setStatus(FIREBASE_CONFIG.apiKey.indexOf('PEGAR')===0
       ? 'Modo local: falta configurar Firebase (los datos NO se comparten entre equipos)'
       : 'Datos almacenados localmente en este dispositivo');
+    if(!localStorage.getItem('imp_2026_09_30')){
+      const have=new Set(records.map(r=>Number(r.n)));
+      IMPORT_1.forEach(r=>{ if(!have.has(r.n)) records.push(Object.assign({},r)); });
+      localStorage.setItem('imp_2026_09_30','1');
+      persist();
+    }
     return;
   }
   if(db) return;
@@ -503,6 +510,16 @@ function initCloud(){
         await uploadAll(records.length?records:SEED_DATA);
       }
       if(!init.exists) await initRef.set({at:Date.now()});
+      const impRef=db.collection('metaxenicas_meta').doc('imp_2026_09_30');
+      const impDoc=await impRef.get();
+      if(!impDoc.exists){
+        const all=await colRef.get(); const have=new Set();
+        all.forEach(d=>have.add(Number(d.data().n)));
+        const b=db.batch();
+        IMPORT_1.forEach(r=>{ if(!have.has(r.n)) b.set(colRef.doc('imp1_'+r.n), Object.assign(cleanRec(r),{_ord:10000+r.n})); });
+        await b.commit();
+        await impRef.set({at:Date.now()});
+      }
       cloudReady=true;
       colRef.onSnapshot(snap=>{
         const editId=(editingIndex!==null && records[editingIndex])?records[editingIndex]._id:null;
