@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --ink:#132420;
@@ -402,6 +404,9 @@
           <select id="filterActividad" onchange="renderTable()"><option value="">Toda actividad</option></select>
           <select id="filterYear" onchange="renderTable()"><option value="">Todo año</option></select>
           <button class="btn ghost" onclick="exportExcel()">Exportar a Excel</button>
+          <button class="btn ghost" onclick="exportBackup()">Respaldo (JSON)</button>
+          <button class="btn ghost" onclick="document.getElementById('importFile').click()">Restaurar respaldo</button>
+          <input id="importFile" type="file" accept=".json,application/json" class="hidden" onchange="importBackup(this)">
         </div>
         <div class="table-scroll">
           <table class="data-table">
@@ -419,7 +424,7 @@
 
   </main>
   </div>
-  <footer class="foot">Sistema interno — Municipalidad Distrital de Lurigancho-Chosica · Datos almacenados localmente en este dispositivo</footer>
+  <footer class="foot">Sistema interno — Municipalidad Distrital de Lurigancho-Chosica · <span id="syncStatus">Datos almacenados localmente en este dispositivo</span></footer>
 </div>
 
 <script>
@@ -444,6 +449,117 @@ function loadRecords(){
 }
 function persist(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  pushCloud();
+}
+
+/* ---------- NUBE (Firebase / Firestore) ---------- */
+// Pega aquí la configuración de tu proyecto Firebase "dengues"
+// (Firebase Console > Configuración del proyecto > Tus apps > Web > firebaseConfig)
+const FIREBASE_CONFIG = {
+  apiKey: "PEGAR_AQUI_TU_API_KEY",
+  authDomain: "dengues.firebaseapp.com",
+  projectId: "dengues",
+  storageBucket: "dengues.appspot.com",
+  messagingSenderId: "",
+  appId: ""
+};
+const CLOUD_ON = !!FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('PEGAR')!==0 && typeof firebase!=='undefined';
+let db=null, colRef=null, cloudReady=false, syncedMap={};
+
+function setStatus(t){ const el=document.getElementById('syncStatus'); if(el) el.textContent=t; }
+function ser(r){ return JSON.stringify(Object.keys(r).filter(k=>k!=='_id').sort().map(k=>[k,r[k]])); }
+function cleanRec(r){ const o={}; Object.keys(r).forEach(k=>{ if(k!=='_id' && r[k]!==undefined) o[k]=r[k]; }); return o; }
+
+async function uploadAll(list){
+  for(let i=0;i<list.length;i+=400){
+    const b=db.batch();
+    list.slice(i,i+400).forEach((r,j)=>{
+      const k=i+j;
+      b.set(colRef.doc('r'+String(k).padStart(5,'0')), Object.assign(cleanRec(r),{_ord:k}));
+    });
+    await b.commit();
+  }
+}
+
+function initCloud(){
+  if(!CLOUD_ON){
+    setStatus(FIREBASE_CONFIG.apiKey.indexOf('PEGAR')===0
+      ? 'Modo local: falta configurar Firebase (los datos NO se comparten entre equipos)'
+      : 'Datos almacenados localmente en este dispositivo');
+    return;
+  }
+  if(db) return;
+  try{
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db=firebase.firestore();
+    colRef=db.collection('metaxenicas_registros');
+  }catch(e){ console.error(e); setStatus('Error al iniciar Firebase: solo guardado local'); return; }
+  setStatus('Conectando a la nube…');
+  (async()=>{
+    try{
+      const initRef=db.collection('metaxenicas_meta').doc('init');
+      const [init,first]=await Promise.all([initRef.get(), colRef.limit(1).get()]);
+      if(!init.exists && first.empty){
+        await uploadAll(records.length?records:SEED_DATA);
+      }
+      if(!init.exists) await initRef.set({at:Date.now()});
+      cloudReady=true;
+      colRef.onSnapshot(snap=>{
+        const editId=(editingIndex!==null && records[editingIndex])?records[editingIndex]._id:null;
+        const arr=[]; syncedMap={};
+        snap.forEach(d=>{ const r=d.data(); r._id=d.id; arr.push(r); syncedMap[d.id]=ser(r); });
+        arr.sort((a,b)=>(a._ord||0)-(b._ord||0));
+        records=arr;
+        if(editId!==null){ const ni=records.findIndex(x=>x._id===editId); editingIndex=ni>=0?ni:null; }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+        setStatus('☁ Sincronizado en la nube · '+records.length+' registros');
+        if(!document.getElementById('appScreen').classList.contains('hidden')){ renderDashboard(); renderTable(); }
+      }, err=>{ console.error(err); setStatus('Sin conexión a la nube: guardando solo en este dispositivo'); });
+    }catch(e){ console.error(e); setStatus('Sin conexión a la nube: guardando solo en este dispositivo'); }
+  })();
+}
+
+function pushCloud(){
+  if(!CLOUD_ON || !cloudReady) return;
+  const b=db.batch(); let ops=0;
+  const ids=new Set();
+  records.forEach((r,i)=>{
+    if(!r._id) r._id=colRef.doc().id;
+    if(r._ord===undefined) r._ord=Date.now()+i;
+    ids.add(r._id);
+    if(syncedMap[r._id]!==ser(r)){ b.set(colRef.doc(r._id), cleanRec(r)); ops++; }
+  });
+  Object.keys(syncedMap).forEach(id=>{ if(!ids.has(id)){ b.delete(colRef.doc(id)); ops++; } });
+  if(!ops) return;
+  setStatus('Guardando en la nube…');
+  b.commit().catch(e=>{ console.error(e); setStatus('Error al guardar en la nube: revisa conexión y reglas de Firestore'); });
+}
+
+/* ---------- RESPALDO ---------- */
+function exportBackup(){
+  const data=records.map(cleanRec);
+  const blob=new Blob([JSON.stringify(data)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='respaldo_metaxenicas_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+function importBackup(input){
+  const f=input.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      const data=JSON.parse(rd.result);
+      if(!Array.isArray(data)) throw new Error('formato');
+      if(!confirm('Esto REEMPLAZARÁ todos los registros actuales por los del respaldo ('+data.length+'). ¿Continuar?')) return;
+      const old=records;
+      records=data.map((r,i)=>{ const o=cleanRec(r); delete o._ord; const prev=old[i]; if(prev&&prev._id) o._id=prev._id; return o; });
+      persist(); renderTable(); renderDashboard();
+      alert('Respaldo restaurado.');
+    }catch(e){ alert('El archivo no es un respaldo válido.'); }
+    input.value='';
+  };
+  rd.readAsText(f);
 }
 
 /* ---------- LOGIN ---------- */
@@ -483,6 +599,7 @@ function switchTab(name){
 /* ---------- INIT ---------- */
 function initApp(){
   loadRecords();
+  initCloud();
   populateStaticControls();
   resetForm();
   renderDashboard();
@@ -532,6 +649,7 @@ function saveRecord(evt){
     actividad: document.getElementById('f_actividad').value
   };
   if(editingIndex !== null && records[editingIndex]){
+    rec._id = records[editingIndex]._id; rec._ord = records[editingIndex]._ord;
     records[editingIndex] = rec;
     persist();
     resetForm();
